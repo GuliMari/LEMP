@@ -1,0 +1,87 @@
+---
+- hosts: all
+  become: yes
+  vars:
+    mysql_root_password: "password"
+    http_host: "{{ ansible_host }}"
+    http_port: "80"
+  
+  tasks:  
+    - name: Update apt package cache
+      apt:
+        update_cache: yes
+      
+    - name: Install LEMP
+      apt:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - nginx
+        - php-fpm
+        - php-mysql
+        - php-cli
+        - mysql-server
+        - python3-pymysql  
+
+    - name: Start services
+      service:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+      loop:
+        - nginx
+        - mysql
+        - php7.2-fpm
+
+# Nginx Configuration
+
+    - name: Configure Nginx
+      template:
+        src: nginx.conf.j2
+        dest: /etc/nginx/sites-available/default
+      notify: restart nginx
+
+    - name: Configure PHP test page
+      template:
+        src: info.php.j2
+        dest: /var/www/html/info.php
+      notify: restart nginx
+      
+    - name: Allow access on port
+      ufw:
+        rule: allow
+        port: "{{ http_port }}"
+        proto: tcp    
+
+# MySQL Configuration
+
+    - name: Set the root password
+      mysql_user:
+        name: root
+        password: "{{ mysql_root_password }}"
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+  
+    - name: Remove all anonymous user accounts
+      mysql_user:
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        name: ''
+        host_all: true
+        state: absent
+   
+    - name: Remove mysql test database
+      mysql_db:
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        name: test
+        state: absent
+
+  handlers:
+    - name: restart nginx
+      service:
+        name: nginx
+        state: restarted
+    
+
+         
+...
